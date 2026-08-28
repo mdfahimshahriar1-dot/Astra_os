@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == 'admin';
+    }
+
+    // Users can read the team directory; only admins or the user themself can write.
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+
+    // Patents: confidential (pre-filing) records are restricted to admins and
+    // the inventors listed on the record. Everyone signed in can read
+    // non-confidential records.
+    match /patents/{patentId} {
+      allow read: if isSignedIn() && (
+        resource.data.confidential == false ||
+        isAdmin() ||
+        request.auth.token.email in resource.data.inventors
+      );
+      allow write: if isAdmin();
+    }
+
+    // Everything else: any signed-in team member can read/write for now.
+    // Tighten this per-collection as the team grows (e.g. budget entries
+    // restricted to admins, documents restricted by allowedTeams).
+    match /projects/{id} { allow read, write: if isSignedIn(); }
+    match /papers/{id} { allow read, write: if isSignedIn(); }
+    match /paperNotes/{id} { allow read, write: if isSignedIn(); }
+    match /milestones/{id} { allow read, write: if isSignedIn(); }
+    match /projectNotes/{id} { allow read, write: if isSignedIn(); }
+    match /meetings/{id} { allow read, write: if isSignedIn(); }
+    match /equipment/{id} { allow read, write: if isSignedIn(); }
+    match /knowledgeEntries/{id} { allow read, write: if isSignedIn(); }
+    match /documents/{id} { allow read, write: if isSignedIn(); }
+    match /downloadRequests/{id} { allow read, write: if isSignedIn(); }
+    match /budgetEntries/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
